@@ -1,0 +1,166 @@
+trigger:
+- none
+
+pool:
+  vmImage: ubuntu-latest   # Recommended over 'default' for consistency and reliability
+
+stages:
+  - stage: Terraform_Init
+    displayName: 'Terraform Init'
+    jobs:
+      - job: init
+        displayName: 'Init'
+        steps:
+          - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@0
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: '1.9.8'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+              backendServiceArm: 'azurerm_asaddevops'
+              backendAzureRmResourceGroupName: 'rg-statefile'
+              backendAzureRmStorageAccountName: 'statefilestorageasad'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'terraform.tfstate'
+              commandOptions: '-reconfigure'
+
+  - stage: Terraform_Plan
+    displayName: 'Terraform Plan'
+    dependsOn: Terraform_Init
+    jobs:
+      - job: plan
+        displayName: 'Plan'
+        steps:
+          - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@0
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: '1.9.8'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+              backendServiceArm: 'azurerm_asaddevops'
+              backendAzureRmResourceGroupName: 'rg-statefile'
+              backendAzureRmStorageAccountName: 'statefilestorageasad'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'terraform.tfstate'
+              commandOptions: '-reconfigure'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform Plan'
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+              environmentServiceNameAzureRM: 'azurerm_asaddevops'
+              commandOptions: >-
+                -var "admin_username=$(VmAdminUsername)"
+                -var "admin_password=$(VmAdminPassword)"
+
+  - stage: Security_Compliance
+    displayName: 'Security & Compliance Scans'
+    dependsOn: Terraform_Plan
+    jobs:
+      - job: security_scans
+        displayName: 'Run TFLint, TFSec, Checkov'
+        steps:
+          # Install tools
+          - bash: |
+              curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+              curl -sSfL https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+              pip install checkov
+            displayName: 'Install TFLint, TFSec, and Checkov'
+
+          # Run TFLint ... tflint -f compact (optional)
+          - bash: |
+              cd $(System.DefaultWorkingDirectory)/terraform
+              tflint --init
+              tflint || true
+            displayName: 'Run TFLint'
+            continueOnError: true   # Optional: don't fail pipeline on warnings
+
+          # Run TFSec ....tfsec . --format json --out tfsec-results.json (optional)
+          - bash: |
+              cd $(System.DefaultWorkingDirectory)/terraform
+              tfsec . --soft-fail --format json --out tfsec-results.json 
+            displayName: 'Run TFSec (Soft Fail)'  
+            
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: '$(System.DefaultWorkingDirectory)/terraform/tfsec-results.json'
+              artifactName: 'tfsec-results'
+            displayName: 'Publish TFSec Results'
+
+          # Run Checkov
+          - bash: |
+              cd $(System.DefaultWorkingDirectory)/terraform
+              checkov -d . --framework terraform --output cli --quiet || true
+            displayName: 'Run Checkov'
+            continueOnError: true   # Optional: review results without blocking
+
+  - stage: Manual_Approval
+    displayName: 'Manual Approval'
+    dependsOn:
+      - Terraform_Plan
+      - Security_Compliance
+    jobs:
+      - job: approval
+        displayName: 'Await Approval'
+        pool: server
+        steps:
+          - task: ManualValidation@0
+            timeoutInMinutes: 60
+            inputs:
+              notifyUsers: |
+                muhammadasadullah1981@gmail.com
+              instructions: |
+                Terraform plan completed and security scans (TFLint, TFSec, Checkov) executed.
+                Please review the plan output and scan results in the logs before approving the apply.
+              onTimeout: 'reject'
+
+  - stage: Terraform_Apply
+    displayName: 'Terraform Apply'
+    dependsOn:
+      - Manual_Approval
+    condition: succeeded('Manual_Approval')
+    jobs:
+      - job: apply
+        displayName: 'Apply'
+        steps:
+          - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@0
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: '1.9.8'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+              backendServiceArm: 'azurerm_asaddevops'
+              backendAzureRmResourceGroupName: 'rg-statefile'
+              backendAzureRmStorageAccountName: 'statefilestorageasad'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'terraform.tfstate'
+              commandOptions: '-reconfigure'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform Apply'
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
+              environmentServiceNameAzureRM: 'azurerm_asaddevops'
+              commandOptions: >-
+                -var "admin_username=$(VmAdminUsername)"
+                -var "admin_password=$(VmAdminPassword)"
+                -auto-approve
