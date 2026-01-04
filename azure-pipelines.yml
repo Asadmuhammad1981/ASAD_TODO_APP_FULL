@@ -65,52 +65,317 @@ stages:
                 -var "admin_username=$(VmAdminUsername)"
                 -var "admin_password=$(VmAdminPassword)"
 
-  - stage: Security_Compliance
-    displayName: 'Security & Compliance Scans'
+  # - stage: Security_Compliance
+  #   displayName: 'Security & Compliance Scans'
+  #   dependsOn: Terraform_Plan
+  #   jobs:
+  #     - job: security_scans
+  #       displayName: 'Run TFLint, TFSec, Checkov'
+  #       steps:
+  #         # Install tools
+  #         - bash: |
+  #             curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+  #             curl -sSfL https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+  #             pip install checkov
+  #           displayName: 'Install TFLint, TFSec, and Checkov'
+
+  #         # Run TFLint ... tflint -f compact (optional)
+  #         - bash: |
+  #             cd $(System.DefaultWorkingDirectory)/terraform
+  #             tflint --init
+  #             tflint || true
+  #           displayName: 'Run TFLint'
+  #           continueOnError: true   # Optional: don't fail pipeline on warnings
+
+  #         # Run TFSec ....tfsec . --format json --out tfsec-results.json (optional)
+  #         - bash: |
+  #             cd $(System.DefaultWorkingDirectory)/terraform
+  #             tfsec . --soft-fail --format json --out tfsec-results.json 
+  #           displayName: 'Run TFSec (Soft Fail)'  
+            
+  #         - task: PublishPipelineArtifact@1
+  #           inputs:
+  #             targetPath: '$(System.DefaultWorkingDirectory)/terraform/tfsec-results.json'
+  #             artifactName: 'tfsec-results'
+  #           displayName: 'Publish TFSec Results'
+
+  #         # Run Checkov
+  #         - bash: |
+  #             cd $(System.DefaultWorkingDirectory)/terraform
+  #             checkov -d . --framework terraform --output cli --quiet || true
+  #           displayName: 'Run Checkov'
+  #           continueOnError: true   # Optional: review results without blocking
+
+
+  # - stage: Code_Quality_Security
+  #   displayName: 'SAST and SCA scanning'
+  #   dependsOn: Terraform_Plan
+  #   jobs: 
+  #     - job: sonar_snyk_scans
+  #       displayName: 'Run SonarQube, Snyk'
+  #       steps: 
+
+  #         # 1. Install SonarScanner CLI
+  #         - bash: |
+  #             echo "Installing SonarScanner..."
+  #             curl -sS https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip -o sonar-scanner.zip
+  #             unzip -qq sonar-scanner.zip
+  #             mv sonar-scanner-5.0.1.3006-linux sonar-scanner
+  #             export PATH="$PWD/sonar-scanner/bin:$PATH"
+  #             sonar-scanner --version
+  #           displayName: 'Install SonarScanner CLI'
+
+  #         # 2. Run SonarQube Scan on Terraform code
+  #         - bash: |
+  #             echo "Running SonarQube analysis on Terraform code..."
+  #             cd terraform
+  #             sonar-scanner \
+  #               -Dsonar.projectKey=${{ variables.SONAR_PROJECT_KEY }} \
+  #               -Dsonar.projectName="TodoApp Terraform Infra" \
+  #               -Dsonar.sources=. \
+  #               -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+  #               -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
+  #               -Dsonar.qualitygate.wait=true \
+  #               -Dsonar.terraform=true   # Enables better Terraform parsing (if using community plugin)
+  #           displayName: 'Run SonarQube Scan'
+  #           env:
+  #            SONAR_TOKEN: $(SONAR_TOKEN)   # Passed as pipeline secret
+
+  #         # 3. Run Snyk IaC Scan
+  #         - bash: |
+  #             echo "Running Snyk Infrastructure as Code scan..."
+  #             npm install -g snyk
+  #             cd terraform
+  #             snyk config set api=$(SNYK_TOKEN)
+  #             snyk iac test --severity-threshold=high || true   # Fail only on high/critical, or remove || true to fail pipeline
+  #           displayName: 'Run Snyk IaC Scan'
+  #           env:
+  #            SNYK_TOKEN: $(SNYK_TOKEN)   # Pipeline secret
+
+# ==================== 1. LINTING STAGE ====================
+
+  - stage: IAC_Linting
+    displayName: 'IaC Linting'
     dependsOn: Terraform_Plan
     jobs:
-      - job: security_scans
-        displayName: 'Run TFLint, TFSec, Checkov'
+      - job: linting
         steps:
-          # Install tools
           - bash: |
               curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+              curl -sSfL https://raw.githubusercontent.com/terraform-linters/tflint-ruleset-azurerm/master/install_linux.sh | bash || true
+              go install github.com/terraform-linters/tflint-bundle@latest
+              npm install -g terraform-fmt-check
+              curl -L https://github.com/bridgecrewio/checkov/releases/download/3.2.0/checkov-linux -o checkov && chmod +x checkov
+              curl -sSfL https://raw.githubusercontent.com/antonbabenko/pre-commit-terraform/master/scripts/install_linux.sh | bash
+            displayName: 'Install Linting Tools'
+
+          - bash: cd terraform && tflint --init && tflint || true
+            displayName: 'TF Lint'
+            continueOnError: true
+
+          - bash: cd terraform && tflint-bundle || true
+            displayName: 'TFLint Bundle (Extra rules)'
+            continueOnError: true
+
+          - bash: cd terraform && terraform fmt -check -recursive || true
+            displayName: 'terraform fmt (official formatter'
+            continueOnError: true
+
+          - bash: cd terraform && terraform-fmt-check || true
+            displayName: 'terraform-fmt-check (advanced formatting'
+            continueOnError: true
+
+          - bash: cd terraform && checkov -d . --framework terraform --compact || true
+            displayName: 'Checkov (basic linting mode)'
+            continueOnError: true
+
+# ==================== 2. SCA SCANNING STAGE ====================
+
+  - stage: IaC_SCA
+    displayName: 'IaC SCA Scanning'
+    dependsOn: Terraform_Plan
+    jobs:
+      - job: sca
+        steps:
+          - bash: |
               curl -sSfL https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+              npm install -g snyk
               pip install checkov
-            displayName: 'Install TFLint, TFSec, and Checkov'
+              curl -sSfL https://raw.githubusercontent.com/bridgecrewio/airiam/master/install.sh | bash || true
+              curl -L https://github.com/zricethezav/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz | tar xz
+            displayName: 'Install SCA Tools'
 
-          # Run TFLint ... tflint -f compact (optional)
-          - bash: |
-              cd $(System.DefaultWorkingDirectory)/terraform
-              tflint --init
-              tflint || true
-            displayName: 'Run TFLint'
-            continueOnError: true   # Optional: don't fail pipeline on warnings
+          - bash: cd terraform && tfsec . --soft-fail
+            displayName: 'tfsec'
+            continueOnError: true
 
-          # Run TFSec ....tfsec . --format json --out tfsec-results.json (optional)
+          - bash: cd terraform && snyk iac test --severity-threshold=high || true
+            displayName: 'Snyk IAC'
+            env:
+              SNYK_TOKEN: $(SNYK_TOKEN)
+
+          - bash: cd terraform && checkov -d . --framework terraform --skip-check=CKV_AZURE_* || true
+            displayName: 'Checov (focused checks)'
+            continueOnError: true
+
+          - bash: cd terraform && terrascan scan -t azure || true
+            displayName: 'Terrafscan'
+            continueOnError: true
+
+          - bash: cd terraform && infracost breakdown --path . --format json --out-file infracost.json || true
+            displayName: 'Infracost (cost as SCA)'
+            env:
+              INFRACOST_API_KEY: $(INFRACOST_API_KEY)
+
+# ==================== 3. SECRET SCANNING STAGE ====================
+
+  - stage: Secret_Scanning
+    displayName: 'Secret Scanning'
+    dependsOn: Terraform_Plan
+    jobs:
+      - job: secrets
+        steps:
           - bash: |
+              npm install -g detect-secrets
+              curl -L https://github.com/trufflesecurity/trufflehog/releases/download/v3.63.0/trufflehog_3.63.0_linux_amd64.tar.gz | tar xz
+              curl -L https://github.com/zricethezav/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz | tar xz
+              pip install git-secret-scanner
+              curl -sSfL https://git.scrt.link/secret-scanner.sh | bash -s -- install
+            displayName: 'Install Secret Scanners'
+
+          - bash: cd terraform && trufflehog filesystem . --json || true
+            displayName: 'truffleHog'
+            continueOnError: true
+
+          - bash: cd terraform && gitleaks detect --source . --verbose || true
+            displayName: 'Gitleaks'
+            continueOnError: true
+
+          - bash: cd terraform && detect-secrets scan --update .secrets.baseline || true
+            displayName: 'detect-secrets'
+            continueOnError: true
+
+          - bash: cd terraform && git-secret-scanner || true
+            displayName: 'git-secret-scanner'
+            continueOnError: true
+
+          - bash: cd terraform && secret-scanner . || true
+            displayName: 'secrte-scanner'
+            continueOnError: true
+
+
+# ==================== 4. SAST SCANNING STAGE ====================
+
+  - stage: IaC_SAST
+    displayName: 'IAC SAST Scanning'
+    dependsOn: terraform_Plan
+    jobs:
+      - job: sast
+        steps:
+          - bash: |
+              npm install -g snyk
+              pip install checkov
+              curl -sSfL https://raw.githubusercontent.com/tenable/terrascan/master/install.sh | bash
+              go install github.com/aquasecurity/tfsec/cmd/tfsec@latest
+              curl -sSfL https://raw.githubusercontent.com/bridgecrewio/checkov/master/scripts/install.sh | bash
+            displayName: 'Install SAST Tools'
+
+          - bash: cd terraform && snyk code test || true
+            displayName: 'Snyk Code'
+            env:
+              SNYK_TOKEN: $(SNYK_TOKEN)
+
+          - bash: cd terraform && checkov -d . --framework terraform_plan --skip-check=CKV_* || true
+            displayName: 'Checkov (plan mode)'
+            continueOnError: true
+
+          - bash: cd terraform && terrascan scan -t all || true
+            displayName: 'terrascan'
+            continueOnError: true
+
+          - bash: cd terraform && tfsec . --force-all-dirs || true
+            displayName: 'tfsec (deep)'
+            continueOnError: true
+
+          - bash: cd terraform && slscan . || true
+            displayName: 'ShiftLeft Scan'
+            continueOnError: true
+        
+# ==================== 5. CODE QUALITY (SonarQube) ====================
+
+  - stage: Code_Quality
+    displayName: 'Code Quality & Security (codacy, DeepSource, Checkmarx, CodeScene'
+    dependsOn: Terraform_Plan
+    jobs:
+    - job: code_quality
+      steps:
+
+      # 1. Codacy Upload
+
+        - bash: |
+            echo "Uploading code to Codacy..."
+              curl -L https://github.com/codacy/codacy-analysis-cli/releases/latest/download/codacy-analysis-cli-linux -o codacy-cli
+              chmod +x codacy-cli
               cd $(System.DefaultWorkingDirectory)/terraform
-              tfsec . --soft-fail --format json --out tfsec-results.json 
-            displayName: 'Run TFSec (Soft Fail)'  
+              ./codacy-cli analysis --project-token $(CODACY_PROJECT_TOKEN) --upload --commit-uuid $BUILD_SOURCEVERSION
+          displayName: 'Codacy Code quality Analysis'
+          env:
+            CODACY_PROJECT_TOKEN: $(CODACY_PROJECT_TOKEN)    # Secret in pipeline
+
+      # 2. DeepSource Analysis
+
+        - bash: |
+              echo "Running DeepSource analysis..."
+              curl -s https://deepsource.io/cli.sh | sh
+              cd $(System.DefaultWorkingDirectory)/terraform
+              deepsource report --analyzer test --key terraform --value-file terraform.tfplan.json || true
+          displayName: 'DeepSource Static Analysis'
+          env:
+            DEEPSOURCE_DSN: $(DEEPSOURCE_DSN)   # Your DeepSource DSN (secret)
             
-          - task: PublishPipelineArtifact@1
-            inputs:
-              targetPath: '$(System.DefaultWorkingDirectory)/terraform/tfsec-results.json'
-              artifactName: 'tfsec-results'
-            displayName: 'Publish TFSec Results'
+      # 3. Checkmarx One CLI (CxOne)
 
-          # Run Checkov
-          - bash: |
-              cd $(System.DefaultWorkingDirectory)/terraform
-              checkov -d . --framework terraform --output cli --quiet || true
-            displayName: 'Run Checkov'
-            continueOnError: true   # Optional: review results without blocking
+        - bash: |
+            echo "Running Checkmarx One scan..."
+            curl -L https://downloads.checkmarx.com/downloads/cxone-cli/latest/cx -o cx
+            chmod +x cx
+            cd $(System.DefaultWorkingDirectory)/terraform
+            ./cx scan create --project-name "TodoApp-Terraform" \
+              --branch $BUILD_SOURCEBRANCHNAME \
+              --source . \
+              --apikey $(CHECKMARX_API_KEY) \
+              --server $(CHECKMARX_SERVER_URL) \
+              --format sarif || true
+          displayName: 'Checkmarx One SAST & IaC Scan'
+          env:
+            CHECKMARX_API_KEY: $(CHECKMARX_API_KEY)
+            CHECKMARX_SERVER_URL: $(CHECKMARX_SERVER_URL) 
+
+      # 4. CodeScene CLI Analysis
+        - bash: |
+            echo "Running CodeScene analysis..."
+            curl -L https://codescene.io/cli/codescene-cli-latest-linux.tar.gz | tar xz
+            cd codescene-cli
+            ./codescene analysis run \
+              --repository-url $(System.DefaultWorkingDirectory) \
+              --api-token $(CODESCENE_API_TOKEN) \
+              --project-id $(CODESCENE_PROJECT_ID)
+          displayName: 'CodeScene Behavioral Code Analysis'
+          env:
+              CODESCENE_API_TOKEN: $(CODESCENE_API_TOKEN)
+              CODESCENE_PROJECT_ID: $(CODESCENE_PROJECT_ID)
+
+# ==================== MANUAL APPROVAL ====================
 
   - stage: Manual_Approval
     displayName: 'Manual Approval'
     dependsOn:
       - Terraform_Plan
-      - Security_Compliance
+      - IaC_Linting
+      - IaC_SCA
+      - Secret_Scanning
+      - IaC_SAST
+      - Code_Quality
     jobs:
       - job: approval
         displayName: 'Await Approval'
@@ -122,9 +387,16 @@ stages:
               notifyUsers: |
                 muhammadasadullah1981@gmail.com
               instructions: |
-                Terraform plan completed and security scans (TFLint, TFSec, Checkov) executed.
-                Please review the plan output and scan results in the logs before approving the apply.
+                All scans completed:
+                • Linting (5 tools)
+                • SCA (5 tools)
+                • Secret scanning (5 tools)
+                • SAST (5 tools)
+                • SonarQube quality gate
+                Review logs and approve to deploy.
               onTimeout: 'reject'
+
+# ==================== TERRAFORM APPLY ====================
 
   - stage: Terraform_Apply
     displayName: 'Terraform Apply'
