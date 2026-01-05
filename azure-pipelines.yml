@@ -312,15 +312,15 @@ stages:
 
       # 1. Codacy Upload
 
-        - bash: |
-            echo "Uploading code to Codacy..."
-              curl -L https://github.com/codacy/codacy-analysis-cli/releases/latest/download/codacy-analysis-cli-linux -o codacy-cli
-              chmod +x codacy-cli
-              cd $(System.DefaultWorkingDirectory)/terraform
-              ./codacy-cli analysis --project-token $(CODACY_PROJECT_TOKEN) --upload --commit-uuid $BUILD_SOURCEVERSION
-          displayName: 'Codacy Code quality Analysis'
-          env:
-            CODACY_PROJECT_TOKEN: $(CODACY_PROJECT_TOKEN)    # Secret in pipeline
+        # - bash: |
+        #     echo "Uploading code to Codacy..."
+        #       curl -L https://github.com/codacy/codacy-analysis-cli/releases/latest/download/codacy-analysis-cli-linux -o codacy-cli
+        #       chmod +x codacy-cli
+        #       cd $(System.DefaultWorkingDirectory)/terraform
+        #       ./codacy-cli analysis --project-token $(CODACY_PROJECT_TOKEN) --upload --commit-uuid $BUILD_SOURCEVERSION
+        #   displayName: 'Codacy Code quality Analysis'
+        #   env:
+        #     CODACY_PROJECT_TOKEN: $(CODACY_PROJECT_TOKEN)    # Secret in pipeline
 
       # 2. DeepSource Analysis
 
