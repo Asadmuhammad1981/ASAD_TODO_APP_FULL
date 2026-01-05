@@ -65,46 +65,46 @@ stages:
                 -var "admin_username=$(VmAdminUsername)"
                 -var "admin_password=$(VmAdminPassword)"
 
-  # - stage: Security_Compliance
-  #   displayName: 'Security & Compliance Scans'
-  #   dependsOn: Terraform_Plan
-  #   jobs:
-  #     - job: security_scans
-  #       displayName: 'Run TFLint, TFSec, Checkov'
-  #       steps:
-  #         # Install tools
-  #         - bash: |
-  #             curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
-  #             curl -sSfL https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
-  #             pip install checkov
-  #           displayName: 'Install TFLint, TFSec, and Checkov'
+  - stage: Security_Compliance
+    displayName: 'Security & Compliance Scans'
+    dependsOn: Terraform_Plan
+    jobs:
+      - job: security_scans
+        displayName: 'Run TFLint, TFSec, Checkov'
+        steps:
+          # Install tools
+          - bash: |
+              curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+              curl -sSfL https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+              pip install checkov
+            displayName: 'Install TFLint, TFSec, and Checkov'
 
-  #         # Run TFLint ... tflint -f compact (optional)
-  #         - bash: |
-  #             cd $(System.DefaultWorkingDirectory)/terraform
-  #             tflint --init
-  #             tflint || true
-  #           displayName: 'Run TFLint'
-  #           continueOnError: true   # Optional: don't fail pipeline on warnings
+          # Run TFLint ... tflint -f compact (optional)
+          - bash: |
+              cd $(System.DefaultWorkingDirectory)/terraform
+              tflint --init
+              tflint || true
+            displayName: 'Run TFLint'
+            continueOnError: true   # Optional: don't fail pipeline on warnings
 
-  #         # Run TFSec ....tfsec . --format json --out tfsec-results.json (optional)
-  #         - bash: |
-  #             cd $(System.DefaultWorkingDirectory)/terraform
-  #             tfsec . --soft-fail --format json --out tfsec-results.json 
-  #           displayName: 'Run TFSec (Soft Fail)'  
+          # Run TFSec ....tfsec . --format json --out tfsec-results.json (optional)
+          - bash: |
+              cd $(System.DefaultWorkingDirectory)/terraform
+              tfsec . --soft-fail --format json --out tfsec-results.json 
+            displayName: 'Run TFSec (Soft Fail)'  
             
-  #         - task: PublishPipelineArtifact@1
-  #           inputs:
-  #             targetPath: '$(System.DefaultWorkingDirectory)/terraform/tfsec-results.json'
-  #             artifactName: 'tfsec-results'
-  #           displayName: 'Publish TFSec Results'
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: '$(System.DefaultWorkingDirectory)/terraform/tfsec-results.json'
+              artifactName: 'tfsec-results'
+            displayName: 'Publish TFSec Results'
 
-  #         # Run Checkov
-  #         - bash: |
-  #             cd $(System.DefaultWorkingDirectory)/terraform
-  #             checkov -d . --framework terraform --output cli --quiet || true
-  #           displayName: 'Run Checkov'
-  #           continueOnError: true   # Optional: review results without blocking
+          # Run Checkov
+          - bash: |
+              cd $(System.DefaultWorkingDirectory)/terraform
+              checkov -d . --framework terraform --output cli --quiet || true
+            displayName: 'Run Checkov'
+            continueOnError: true   # Optional: review results without blocking
 
 
   # - stage: Code_Quality_Security
@@ -325,45 +325,33 @@ stages:
       # 2. DeepSource Analysis
 
         - bash: |
+            echo "Installing DeepSource CLI..."
+              curl https://deepsource.io/cli.sh | sh
               echo "Running DeepSource analysis..."
-              curl -s https://deepsource.io/cli.sh | sh
-              cd $(System.DefaultWorkingDirectory)/terraform
-              deepsource report --analyzer test --key terraform --value-file terraform.tfplan.json || true
+              ~/.deepsource/bin/deepsource report --analyzer=test-coverage --key=terraform --value-file=./coverage.out
+              # Or for generic code analysis:
+              # ~/.deepsource/bin/deepsource report --analyzer=static-analysis
+    
+              # Optional: Fail pipeline on issues
+              # ~/.deepsource/bin/deepsource report --analyzer=static-analysis --fail-on-issue
           displayName: 'DeepSource Static Analysis'
           env:
-            DEEPSOURCE_DSN: $(DEEPSOURCE_DSN)   # Your DeepSource DSN (secret)
-            
-      # 3. Checkmarx One CLI (CxOne)
+              DEEPSOURCE_TOKEN: $(DEEPSOURCE_DSN)  # Secret variable
+ 
 
-        # - bash: |
-        #     echo "Running Checkmarx One scan..."
-        #     curl -L https://downloads.checkmarx.com/downloads/cxone-cli/latest/cx -o cx
-        #     chmod +x cx
-        #     cd $(System.DefaultWorkingDirectory)/terraform
-        #     ./cx scan create --project-name "TodoApp-Terraform" \
-        #       --branch $BUILD_SOURCEBRANCHNAME \
-        #       --source . \
-        #       --apikey $(CHECKMARX_API_KEY) \
-        #       --server $(CHECKMARX_SERVER_URL) \
-        #       --format sarif || true
-        #   displayName: 'Checkmarx One SAST & IaC Scan'
-        #   env:
-        #     CHECKMARX_API_KEY: $(CHECKMARX_API_KEY)
-        #     CHECKMARX_SERVER_URL: $(CHECKMARX_SERVER_URL) 
-
-      # 4. CodeScene CLI Analysis
-        - bash: |
-            echo "Running CodeScene analysis..."
-            curl -L https://codescene.io/cli/codescene-cli-latest-linux.tar.gz | tar xz
-            cd codescene-cli
-            ./codescene analysis run \
-              --repository-url $(System.DefaultWorkingDirectory) \
-              --api-token $(CODESCENE_API_TOKEN) \
-              --project-id $(CODESCENE_PROJECT_ID)
-          displayName: 'CodeScene Behavioral Code Analysis'
-          env:
-              CODESCENE_API_TOKEN: $(CODESCENE_API_TOKEN)
-              CODESCENE_PROJECT_ID: $(CODESCENE_PROJECT_ID)
+      # # 3. CodeScene CLI Analysis - Checked online through PR
+      #   - bash: |
+      #       echo "Running CodeScene analysis..."
+      #       curl -L https://codescene.io/cli/codescene-cli-latest-linux.tar.gz | tar xz
+      #       cd codescene-cli
+      #       ./codescene analysis run \
+      #         --repository-url $(System.DefaultWorkingDirectory) \
+      #         --api-token $(CODESCENE_API_TOKEN) \
+      #         --project-id $(CODESCENE_PROJECT_ID)
+      #     displayName: 'CodeScene Behavioral Code Analysis'
+      #     env:
+      #         CODESCENE_API_TOKEN: $(CODESCENE_API_TOKEN)
+      #         CODESCENE_PROJECT_ID: $(CODESCENE_PROJECT_ID)
 
 # ==================== MANUAL APPROVAL ====================
 
