@@ -326,17 +326,19 @@ stages:
 
         - bash: |
             echo "Installing DeepSource CLI..."
-              curl https://deepsource.io/cli.sh | sh
-              echo "Running DeepSource analysis..."
-              ~/.deepsource/bin/deepsource report --analyzer=test-coverage --key=terraform --value-file=./coverage.out
-              # Or for generic code analysis:
-              # ~/.deepsource/bin/deepsource report --analyzer=static-analysis
-    
-              # Optional: Fail pipeline on issues
-              # ~/.deepsource/bin/deepsource report --analyzer=static-analysis --fail-on-issue
+            curl https://deepsource.io/cli | sh
+
+            echo "Adding CLI to PATH..."
+            export PATH="$HOME/.deepsource/bin:$PATH"
+
+            echo "Running DeepSource analysis..."
+            deepsource report --analyzer=static-analysis --fail-on-issue
+    # Or for Terraform-specific (if you have .deepsource.toml configured):
+    # deepsource analyze
+
           displayName: 'DeepSource Static Analysis'
           env:
-              DEEPSOURCE_TOKEN: $(DEEPSOURCE_DSN)  # Secret variable
+             DEEPSOURCE_DSN: $DEEPSOURCE_DSN  # Add this secret pipeline variable (get DSN from DeepSource repo settings) 
  
 
       # # 3. CodeScene CLI Analysis - Checked online through PR
