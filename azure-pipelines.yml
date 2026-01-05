@@ -335,21 +335,21 @@ stages:
             
       # 3. Checkmarx One CLI (CxOne)
 
-        - bash: |
-            echo "Running Checkmarx One scan..."
-            curl -L https://downloads.checkmarx.com/downloads/cxone-cli/latest/cx -o cx
-            chmod +x cx
-            cd $(System.DefaultWorkingDirectory)/terraform
-            ./cx scan create --project-name "TodoApp-Terraform" \
-              --branch $BUILD_SOURCEBRANCHNAME \
-              --source . \
-              --apikey $(CHECKMARX_API_KEY) \
-              --server $(CHECKMARX_SERVER_URL) \
-              --format sarif || true
-          displayName: 'Checkmarx One SAST & IaC Scan'
-          env:
-            CHECKMARX_API_KEY: $(CHECKMARX_API_KEY)
-            CHECKMARX_SERVER_URL: $(CHECKMARX_SERVER_URL) 
+        # - bash: |
+        #     echo "Running Checkmarx One scan..."
+        #     curl -L https://downloads.checkmarx.com/downloads/cxone-cli/latest/cx -o cx
+        #     chmod +x cx
+        #     cd $(System.DefaultWorkingDirectory)/terraform
+        #     ./cx scan create --project-name "TodoApp-Terraform" \
+        #       --branch $BUILD_SOURCEBRANCHNAME \
+        #       --source . \
+        #       --apikey $(CHECKMARX_API_KEY) \
+        #       --server $(CHECKMARX_SERVER_URL) \
+        #       --format sarif || true
+        #   displayName: 'Checkmarx One SAST & IaC Scan'
+        #   env:
+        #     CHECKMARX_API_KEY: $(CHECKMARX_API_KEY)
+        #     CHECKMARX_SERVER_URL: $(CHECKMARX_SERVER_URL) 
 
       # 4. CodeScene CLI Analysis
         - bash: |
