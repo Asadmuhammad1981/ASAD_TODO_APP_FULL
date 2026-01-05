@@ -22,7 +22,7 @@ stages:
               provider: 'azurerm'
               command: 'init'
               workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
-              backendServiceArm: 'azurerm_asaddevops'
+              backendServiceArm: 'azurerm_asaddevops-ASAD_TODO_APP_FULL'
               backendAzureRmResourceGroupName: 'rg-statefile'
               backendAzureRmStorageAccountName: 'statefilestorageasad'
               backendAzureRmContainerName: 'tfstate'
@@ -47,7 +47,7 @@ stages:
               provider: 'azurerm'
               command: 'init'
               workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
-              backendServiceArm: 'azurerm_asaddevops'
+              backendServiceArm: 'azurerm_asaddevops-ASAD_TODO_APP_FULL'
               backendAzureRmResourceGroupName: 'rg-statefile'
               backendAzureRmStorageAccountName: 'statefilestorageasad'
               backendAzureRmContainerName: 'tfstate'
@@ -60,7 +60,7 @@ stages:
               provider: 'azurerm'
               command: 'plan'
               workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
-              environmentServiceNameAzureRM: 'azurerm_asaddevops'
+              environmentServiceNameAzureRM: 'azurerm_asaddevops-ASAD_TODO_APP_FULL'
               commandOptions: >-
                 -var "admin_username=$(VmAdminUsername)"
                 -var "admin_password=$(VmAdminPassword)"
@@ -418,7 +418,7 @@ stages:
               provider: 'azurerm'
               command: 'init'
               workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
-              backendServiceArm: 'azurerm_asaddevops'
+              backendServiceArm: 'azurerm_asaddevops-ASAD_TODO_APP_FULL'
               backendAzureRmResourceGroupName: 'rg-statefile'
               backendAzureRmStorageAccountName: 'statefilestorageasad'
               backendAzureRmContainerName: 'tfstate'
@@ -431,7 +431,7 @@ stages:
               provider: 'azurerm'
               command: 'apply'
               workingDirectory: '$(System.DefaultWorkingDirectory)/terraform'
-              environmentServiceNameAzureRM: 'azurerm_asaddevops'
+              environmentServiceNameAzureRM: 'azurerm_asaddevops-ASAD_TODO_APP_FULL'
               commandOptions: >-
                 -var "admin_username=$(VmAdminUsername)"
                 -var "admin_password=$(VmAdminPassword)"
