@@ -188,33 +188,36 @@ stages:
         steps:
 
         - bash: |
-            echo "Installing Terrascan..."
-            curl -L https://github.com/accurics/terrascan/releases/latest/download/terrascan_linux_amd64.tar.gz -o terrascan.tar.gz
+            echo "Installing Terrascan (latest version)..."
+            # Fetch latest Linux x86_64 tar.gz URL and download
+            curl -L "$(curl -s https://api.github.com/repos/tenable/terrascan/releases/latest | grep -o -E "https://.+?_Linux_x86_64.tar.gz")" -o terrascan.tar.gz
+            
+            # Extract and install
             tar -xzf terrascan.tar.gz
-            sudo mv terrascan /usr/local/bin/terrascan
-            sudo chmod +x /usr/local/bin/terrascan
+            sudo install terrascan /usr/local/bin/terrascan
+            rm terrascan terrascan.tar.gz  # Cleanup
 
-            echo "Verifying Terrascan version..."
+            echo "Verifying Terrascan..."
             terrascan version
 
             echo "Running Terrascan scan..."
             cd $TERRAFORM_DIR
-            terrascan scan -t all --non-recursive || true
-            # Options explained:
-            # -t all               : Scan all supported providers (azure, aws, gcp, etc.)
-            # --non-recursive      : Scan only current dir (faster, avoids submodules)
-            # || true              : Don't fail pipeline on findings (remove later to gate)
+            terrascan scan -t azure --non-recursive || true
+            # -t azure: Focus on Azure policies (your resources)
+            # --non-recursive: Faster, scans current dir only
+            # || true: Don't fail pipeline (remove later to gate on violations)
 
           displayName: 'Terrascan IaC Security Scan'
 
         - task: SnykSecurityScan@1
           displayName: 'Snyk Code Scan'
           inputs:
-            serviceConnection: 'SnykServiceConnection'  # Create a service connection with your API token
-            testType: 'code'
-            severityThreshold: 'high'
-            targetFile: 'terraform/'  # Optional: limit to folder
-            failOnIssues: false
+            serviceConnectionEndpoint: 'SnykAuthConnection'  # Exact name of your service connection
+            testType: 'code'                                 # or 'iac' for Terraform
+            targetFile: 'terraform/'                         # Optional: limit to Terraform folder
+            severityThreshold: 'high'                        # 'low', 'medium', 'high', 'critical'
+            failOnIssues: false                              # Set to true to gate pipeline on findings
+            monitor: true
 
         - bash: |
             echo "Installing DeepSource CLI..."
