@@ -97,7 +97,6 @@ stages:
           # Install tools
           - bash: |
               curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
-              curl -sSfL https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
               pip install checkov
             displayName: 'Install TFLint, TFSec, and Checkov'
 
@@ -111,15 +110,24 @@ stages:
 
           # Run TFSec ....tfsec . --format json --out tfsec-results.json (optional)
           - bash: |
+              echo "Installing tfsec..."
+              curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+
+              echo "Running tfsec with SARIF output..."
               cd $TERRAFORM_DIR
-              tfsec . --soft-fail --format json --out tfsec-results.json 
-            displayName: 'Run TFSec (Soft Fail)'  
+              tfsec . --force-all-dirs --format sarif --out tfsec.sarif || true
+
+    # --format sarif : Outputs in SARIF format (standard for code scanning)
+    # --out tfsec.sarif : Saves to file
+    # || true : Don't fail pipeline on findings
+
+            displayName: 'tfsec IaC Security Scan'
             
           - task: PublishPipelineArtifact@1
+            displayName: 'Publish tfsec Results'
             inputs:
-              targetPath: '$TERRAFORM_DIR/tfsec-results.json'
-              artifactName: 'tfsec-results'
-            displayName: 'Publish TFSec Results'
+              targetPath: '$(TERRAFORM_DIR)/tfsec.sarif'  # Path to the generated file
+              artifactName: 'CodeAnalysisLogs'           # Special name for Azure DevOps code scanning integration
 
           # Run Checkov
           - bash: |
@@ -132,7 +140,9 @@ stages:
 
   - stage: Terraform_Plan
     displayName: 'Terraform Plan'
-    dependsOn: Terraform_Init
+    dependsOn: 
+    - Terraform_Init
+    - Linting_Static_Security
     jobs:
       - job: plan
         displayName: 'Plan'
