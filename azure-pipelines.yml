@@ -229,31 +229,25 @@ stages:
 
   - stage: FinOps
     displayName: 'FinOps'
-    dependsOn:
-    - Terraform_Plan
-    - Security_Compliance
     jobs:
-        - job: cost_analysis
-          steps:
-            - task: InfracostSetup@1
-              displayName: 'Setup Infracost'
-              inputs:
-                apiKey: $(infracostApiKey)
+    - job: cost_analysis
+      steps:
+        - bash: |
+            echo "Installing Infracost CLI..."
+            curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
 
-            - bash: |
-                cd $TERRAFORM_DIR
-                infracost breakdown --path . --format json --out-file infracost.json
-                cat infracost.json
-              displayName: 'Infracost Cost Breakdown'
+            echo "Running Infracost breakdown..."
+            cd $TERRAFORM_DIR
+            infracost breakdown --path . --format json --out-file infracost.json
+            cat infracost.json | jq '{monthlyCost: .totalMonthlyCost, currency: .currency}'
+          displayName: 'Infracost Cost Estimate'
+          env:
+            INFRACOST_API_KEY: $(infracostApiKey)
 
-            - bash: |
-                infracost comment azure-repos --path infracost.json --repo $(Build.Repository.Name) --pull-request $(System.PullRequest.PullRequestId) --azure-access-token $(System.AccessToken)
-              displayName: 'Post Infracost Comment to PR'
-
-            - task: PublishPipelineArtifact@1
-              inputs:
-                targetPath: '$(TERRAFORM_DIR)/infracost.json'
-                artifactName: 'infracost-report'
+        - task: PublishPipelineArtifact@1
+          inputs:
+            targetPath: '$(TERRAFORM_DIR)/infracost.json'
+            artifactName: 'infracost-report'
 
 # ==================== MANUAL APPROVAL ====================
 
