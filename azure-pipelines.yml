@@ -227,33 +227,33 @@ stages:
 
 # ==================== FinOps ========================
 
-  -  stage: FinOps
-     displayName: 'FinOps'
-     dependsOn:
-       - Terraform_Plan
-       - Security_Compliance
-     jobs:
-       - job: cost_analysis
-         steps:
-          - task: InfracostSetup@1
-            displayName: 'Setup Infracost'
-            inputs:
-              apiKey: $infracostApiKey  # Or INFRACOST_API_KEY
+  - stage: FinOps
+    displayName: 'FinOps'
+    dependsOn:
+    - Terraform_Plan
+    - Security_Compliance
+    jobs:
+        - job: cost_analysis
+          steps:
+            - task: InfracostSetup@1
+              displayName: 'Setup Infracost'
+              inputs:
+                apiKey: $(infracostApiKey)
 
-          - bash: |
-              cd $TERRAFORM_DIR
-              infracost breakdown --path . --format json --out-file infracost.json
-              cat infracost.json  # Optional: view in logs
-            displayName: 'Infracost Cost Breakdown'
+            - bash: |
+                cd $TERRAFORM_DIR
+                infracost breakdown --path . --format json --out-file infracost.json
+                cat infracost.json
+              displayName: 'Infracost Cost Breakdown'
 
-          - bash: |
-              infracost comment azure-repos --path infracost.json --repo $(Build.Repository.Name) --pull-request $(System.PullRequest.PullRequestId) --azure-access-token $(System.AccessToken)
-            displayName: 'Post Infracost Comment to PR'
+            - bash: |
+                infracost comment azure-repos --path infracost.json --repo $(Build.Repository.Name) --pull-request $(System.PullRequest.PullRequestId) --azure-access-token $(System.AccessToken)
+              displayName: 'Post Infracost Comment to PR'
 
-          - task: PublishPipelineArtifact@1
-            inputs:
-              targetPath: '$(TERRAFORM_DIR)/infracost.json'
-              artifactName: 'infracost-report'
+            - task: PublishPipelineArtifact@1
+              inputs:
+                targetPath: '$(TERRAFORM_DIR)/infracost.json'
+                artifactName: 'infracost-report'
 
 # ==================== MANUAL APPROVAL ====================
 
