@@ -223,23 +223,25 @@ stages:
             echo "Installing DeepSource CLI..."
             curl https://deepsource.io/cli | sh
 
-            echo "Adding CLI to PATH..."
             export PATH="$(pwd)/bin:$PATH"
 
             echo "Verifying installation..."
-            deepsource version   # Correct command
+            deepsource version
 
             echo "Running DeepSource analysis..."
             cd $TERRAFORM_DIR
-            deepsource report --analyzer=static-analysis || true
-            # No --fail-on-issue flag — use || true to not fail pipeline
-            # Requires DEEPSOURCE_DSN env var for full reporting (see below)
+
+            # Try dashboard-connected analysis (requires valid DSN)
+            deepsource report --analyzer=static-analysis || echo "Dashboard report failed (check DSN) - running local scan..."
+
+            # Fallback: Local issues list (no DSN needed)
+            deepsource issues list || true
 
           displayName: 'DeepSource Static Analysis'
           env:
-            DEEPSOURCE_DSN: $(DeepSourceDSN)  # Secret pipeline variable
+            DEEPSOURCE_DSN: $(DeepSourceDSN)
 
-# ==================== FinOps ========================
+# ==================== FinOps (Check Infracost scan locally)========================
 
   - stage: FinOps
     displayName: 'FinOps'
@@ -247,21 +249,37 @@ stages:
     - job: cost_analysis
       steps:
         - bash: |
-            echo "Installing Infracost CLI..."
-            curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+            echo "Installing OpenInfraQuote..."
+            curl -L https://github.com/terrateamio/openinfraquote/releases/latest/download/oiq-linux-amd64 -o oiq
+            chmod +x oiq
+            sudo mv oiq /usr/local/bin/oiq
 
-            echo "Running Infracost breakdown..."
             cd $TERRAFORM_DIR
-            infracost breakdown --path . --format json --out-file infracost.json
-            cat infracost.json | jq '{monthlyCost: .totalMonthlyCost, currency: .currency}'
-          displayName: 'Infracost Cost Estimate'
-          env:
-            INFRACOST_API_KEY: $(infracostApiKey)
+            terraform plan -out=tfplan.binary
+            terraform show -json tfplan.binary > tfplan.json
 
-        - task: PublishPipelineArtifact@1
-          inputs:
-            targetPath: '$(TERRAFORM_DIR)/infracost.json'
-            artifactName: 'infracost-report'
+            curl -s https://oiq.terrateam.io/prices.csv.gz | gunzip > prices.csv
+            oiq match --pricesheet prices.csv tfplan.json | oiq price --region eastus > cost-estimate.txt
+            cat cost-estimate.txt
+          displayName: 'OpenInfraQuote Cost Estimate'
+
+
+        # - bash: |
+        #     echo "Installing Infracost CLI..."
+        #     curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+
+        #     echo "Running Infracost breakdown..."
+        #     cd $TERRAFORM_DIR
+        #     infracost breakdown --path . --format json --out-file infracost.json
+        #     cat infracost.json | jq '{monthlyCost: .totalMonthlyCost, currency: .currency}'
+        #   displayName: 'Infracost Cost Estimate'
+        #   env:
+        #     INFRACOST_API_KEY: $(infracostApiKey)
+
+        # - task: PublishPipelineArtifact@1
+        #   inputs:
+        #     targetPath: '$(TERRAFORM_DIR)/infracost.json'
+        #     artifactName: 'infracost-report'
 
 # ==================== MANUAL APPROVAL ====================
 
@@ -283,11 +301,8 @@ stages:
                 muhammadasadullah1981@gmail.com
               instructions: |
                 All scans completed:
-                • Linting (5 tools)
-                • SCA (5 tools)
+                • Linting
                 • Secret scanning (5 tools)
-                • SAST (5 tools)
-                • SonarQube quality gate
                 Review logs and approve to deploy.
               onTimeout: 'reject'
 
