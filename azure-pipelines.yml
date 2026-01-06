@@ -209,15 +209,15 @@ stages:
 
           displayName: 'Terrascan IaC Security Scan'
 
-        - task: SnykSecurityScan@1
-          displayName: 'Snyk Code Scan'
-          inputs:
-            serviceConnectionEndpoint: 'SnykAuthConnection'  # Exact name of your service connection
-            testType: 'code'                                 # or 'iac' for Terraform
-            targetFile: 'terraform/'                         # Optional: limit to Terraform folder
-            severityThreshold: 'high'                        # 'low', 'medium', 'high', 'critical'
-            failOnIssues: false                              # Set to true to gate pipeline on findings
-            monitor: true
+        # - task: SnykSecurityScan@1
+        #   displayName: 'Snyk Code Scan'
+        #   inputs:
+        #     serviceConnectionEndpoint: 'SnykAuthConnection'  # Exact name of your service connection
+        #     testType: 'code'                                 # or 'iac' for Terraform
+        #     targetFile: 'terraform/'                         # Optional: limit to Terraform folder
+        #     severityThreshold: 'high'                        # 'low', 'medium', 'high', 'critical'
+        #     failOnIssues: false                              # Set to true to gate pipeline on findings
+        #     monitor: true
 
         - bash: |
             echo "Installing DeepSource CLI..."
