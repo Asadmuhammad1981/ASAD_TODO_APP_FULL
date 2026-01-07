@@ -330,6 +330,8 @@ stages:
 
 # ==================== TERRAFORM APPLY ====================
 
+# ==================== TERRAFORM APPLY ====================
+
   - stage: Terraform_Apply
     displayName: 'Terraform Apply'
     dependsOn:
