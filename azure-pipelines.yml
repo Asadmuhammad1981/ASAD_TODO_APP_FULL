@@ -249,18 +249,23 @@ stages:
     - job: cost_analysis
       steps:
         - bash: |
-            echo "Installing OpenInfraQuote..."
-            curl -L https://github.com/terrateamio/openinfraquote/releases/latest/download/oiq-linux-amd64 -o oiq
+            echo "Installing Terraform..."
+            wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
+            echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+            sudo apt update && sudo apt install -y terraform
+
+            echo "Installing OpenInfraQuote (oiq)..."
+            # Use direct latest release path (v1.10.0 as of Jan 2026; update if needed)
+            curl -L https://github.com/terrateamio/openinfraquote/releases/download/v1.10.0/oiq-linux-amd64 -o oiq
             chmod +x oiq
             sudo mv oiq /usr/local/bin/oiq
-            oiq --version  # Optional: Verify installation
+            oiq --version  # Verify
 
-            # Install gunzip if needed (ubuntu-latest usually has it, but safe)
+            echo "Installing gzip (for pricesheet)..."
             sudo apt-get update && sudo apt-get install -y gzip
 
             cd $TERRAFORM_DIR
 
-            # Run init if not already done in previous step
             terraform init
 
             terraform plan -out=tfplan.binary
@@ -269,18 +274,17 @@ stages:
             echo "Downloading latest pricesheet..."
             curl -s https://oiq.terrateam.io/prices.csv.gz | gunzip > prices.csv
 
-            echo "Generating cost estimate..."
+            echo "Generating cost estimate (westus2)..."
             oiq match --pricesheet prices.csv tfplan.json | oiq price --region westus2 > cost-estimate.txt
 
             echo "=== Cost Estimate ==="
             cat cost-estimate.txt
           displayName: 'OpenInfraQuote Cost Estimate'
           
-            # If you have Terraform vars/secrets, map them here
-          
+            # Map any TF vars/secrets here if needed
+
         - publish: cost-estimate.txt
           artifact: CostEstimate
-
 
         # - bash: |
         #     echo "Installing Infracost CLI..."
