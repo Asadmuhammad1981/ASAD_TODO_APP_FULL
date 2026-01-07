@@ -1,0 +1,13 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+providers/
+crash.log
+override.tf
+override.tf.json
+*.tfvars
+*.tfvars.json
+
+# Keep lock file
+!terraform.lock.hcl
