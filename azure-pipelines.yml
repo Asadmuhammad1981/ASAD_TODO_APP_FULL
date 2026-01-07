@@ -253,15 +253,33 @@ stages:
             curl -L https://github.com/terrateamio/openinfraquote/releases/latest/download/oiq-linux-amd64 -o oiq
             chmod +x oiq
             sudo mv oiq /usr/local/bin/oiq
+            oiq --version  # Optional: Verify installation
+
+            # Install gunzip if needed (ubuntu-latest usually has it, but safe)
+            sudo apt-get update && sudo apt-get install -y gzip
 
             cd $TERRAFORM_DIR
+
+            # Run init if not already done in previous step
+            terraform init
+
             terraform plan -out=tfplan.binary
             terraform show -json tfplan.binary > tfplan.json
 
+            echo "Downloading latest pricesheet..."
             curl -s https://oiq.terrateam.io/prices.csv.gz | gunzip > prices.csv
-            oiq match --pricesheet prices.csv tfplan.json | oiq price --region eastus > cost-estimate.txt
+
+            echo "Generating cost estimate..."
+            oiq match --pricesheet prices.csv tfplan.json | oiq price --region westus2 > cost-estimate.txt
+
+            echo "=== Cost Estimate ==="
             cat cost-estimate.txt
           displayName: 'OpenInfraQuote Cost Estimate'
+          
+            # If you have Terraform vars/secrets, map them here
+          
+        - publish: cost-estimate.txt
+          artifact: CostEstimate
 
 
         # - bash: |
